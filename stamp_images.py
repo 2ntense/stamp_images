@@ -2,15 +2,22 @@ import os
 import shutil
 import subprocess
 from datetime import datetime
-
+from dataclasses import dataclass
 from PIL import Image, ImageFont, ImageDraw
 
 root_dir = r"C:\Users\stefa\Desktop\mush\pics"
-main_dir = os.path.join(root_dir, "main")
-wide_dir = os.path.join(root_dir, "wide")
 
-main_stamped_dir = os.path.join(main_dir, "stamped")
-wide_stamped_dir = os.path.join(wide_dir, "stamped")
+
+@dataclass
+class Camera:
+    name: str
+    res: tuple
+
+    def dir(self):
+        return os.path.join(root_dir, self.name)
+
+    def stamped_dir(self):
+        return os.path.join(self.dir(), "stamped")
 
 
 def add_time(path, dt: datetime, index):
@@ -33,24 +40,14 @@ def get_all_jpg_in_dir(path):
     return out
 
 
-# puts photos made by main camera in ./main and wide camera in ./wide
-def sort_main_wide(path):
-    os.makedirs(main_dir, exist_ok=True)
-    os.makedirs(wide_dir, exist_ok=True)
-
-    main_res = (4656, 3492)
-    wide_res = (4160, 3120)
-
-    for e in get_all_jpg_in_dir(path):
-        with open(e.path, "rb") as f:
+def sort_images_by_cam(path: str, cam: Camera):
+    os.makedirs(cam.dir(), exist_ok=True)
+    for jpg in get_all_jpg_in_dir(path):
+        with open(jpg.path, "rb") as f:
             im = Image.open(f)
-            size = im.size
-        if size == main_res:
-            shutil.move(e.path, main_dir)
-        elif size == wide_res:
-            shutil.move(e.path, wide_dir)
-        else:
-            print("Error: not wide or main")
+            res = im.size
+        if res == cam.res:
+            shutil.move(jpg.path, cam.dir())
 
 
 def hourly_list(path):
@@ -91,23 +88,26 @@ def create_vid(path):
         f"{ffmpeg_bin} -y -f image2 -framerate 1 -i {input_images} -r 30 -s 3840x2160 -pix_fmt yuv420p -c:v hevc {output_file}")
 
 
+def stamp_images(path):
+    img_list = hourly_list(path)
+    if not check_hourly_list(img_list):
+        exit(0)
+    for i, e in enumerate(img_list, 1):
+        add_time(e[0], e[1], i)
+
+
 def main():
-    sort_main_wide(root_dir)
-    main_images = hourly_list(main_dir)
-    if not check_hourly_list(main_images):
-        exit(0)
-    wide_images = hourly_list(wide_dir)
-    if not check_hourly_list(wide_images):
-        exit(0)
+    main_cam = Camera("main", (4656, 3492))
+    wide_cam = Camera("wide", (4160, 3120))
 
-    for i, e in enumerate(main_images, 1):
-        add_time(e[0], e[1], i)
+    sort_images_by_cam(root_dir, main_cam)
+    sort_images_by_cam(root_dir, wide_cam)
 
-    for i, e in enumerate(wide_images, 1):
-        add_time(e[0], e[1], i)
+    stamp_images(main_cam.dir())
+    stamp_images(wide_cam.dir())
 
-    create_vid(main_stamped_dir)
-    create_vid(wide_stamped_dir)
+    create_vid(main_cam.stamped_dir())
+    create_vid(wide_cam.stamped_dir())
 
 
 if __name__ == "__main__":
